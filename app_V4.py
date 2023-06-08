@@ -21,7 +21,6 @@ st.set_page_config(page_title="Field Strength Dashboard",
 
 raw = pd.read_csv("fea_magnet_field_data_master.csv")
 
-
 #Import the list of standard magnets. These are the ones that will be included in the chart
 #df_range = pd.read_csv("H:/APPLICATIONS DATA\Apps and Calculators/Data/standard_magnet_range.csv")
 
@@ -31,12 +30,22 @@ df_range = pd.read_csv("standard_magnet_range.csv")
 
 col_names = list(raw.columns)
 
-
+#convert the gauss table to long format
 df = pd.melt(raw, 
              id_vars='Distance',
              value_vars=col_names,
              var_name='Magnet',
              value_name='Gauss'
+            )
+
+raw = pd.read_csv("fd_from_master_minus5pct.csv")
+
+#convert the force density table to long format
+df2 = pd.melt(raw, 
+             id_vars='Distance',
+             value_vars=col_names,
+             var_name='Magnet',
+             value_name='Force Density'
             )
 
 #Add in a safety factor e.g. for a 5% reduction set sf = 5
@@ -46,8 +55,12 @@ sf = ((100-sf)/100)
 df['Gauss'] = df['Gauss'].apply(lambda x: x*10000*sf)
 
 
+
 #convert Gauss column from decimal to interger type
 df = df.astype({'Gauss':'int'})
+
+#round the force density data to 1dp
+df2['Force Density'] = df2['Force Density'].round(decimals = 1)
 
 #filter the magnet models to include only the standard range
 mag_range = df_range[df_range['include']==1]
@@ -59,28 +72,13 @@ int = 5
 
 pts = list(range(min,max+int,int))
 
-#st.dataframe(mag_range)
-
-df['Force Density']= np.NaN
-
-for i in range(int,len(df)-1-int):
-    df.loc[i,'Force Density'] = 0.01*df.loc[i,'Gauss']*((df.loc[i-int,'Gauss']-df.loc[i+int,'Gauss'])/(2*int))
-    
-
-# Applying the condition
-df.loc[df["Force Density"] < 0, "Force Density"] = np.NaN
-df.loc[df["Distance"] == 5, "Force Density"] = np.NaN
-
-df['Force Density'] = df['Force Density'].round(decimals = 1)
-
-
 mag_include = mag_range['magnet']
 
+#Data frame for the gauss values
 df = df[(df['Magnet'].isin(mag_include)) & (df['Distance'].isin(pts))]
+#Data frame for the force density values
+df2 = df2[(df2['Magnet'].isin(mag_include)) & (df2['Distance'].isin(pts))]
 
-#st.markdown(mag_include)
-
-#st.dataframe(df)
 
 st.sidebar.header("Please Filter Here:")
 
@@ -89,12 +87,18 @@ magnet = st.sidebar.multiselect(
     options=df["Magnet"].unique(),
 )
 
+#data frame including the selected models 
 df_selection = df.query(
+    "Magnet == @magnet"
+)
+
+df_selection2 = df2.query(
     "Magnet == @magnet"
 )
 #df_selection = df_selection[["distance","gauss"]]
 
 #st.dataframe(df_selection.style.format(precision=1))
+#st.dataframe(df_selection2.style.format(precision=1))
 
 ## ---- MAINPAGE ----
 st.title(":chart_with_downwards_trend: Magnet Field Charts")
@@ -151,7 +155,7 @@ st.plotly_chart(fig_gauss, use_container_width=True)
 st.header("Force Density")
 #st.markdown("")
 fig_fd = px.line(
-    df_selection, 
+    df_selection2, 
     x='Distance', 
     y='Force Density',
     color='Magnet',
